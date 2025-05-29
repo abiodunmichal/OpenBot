@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -20,11 +21,11 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import java.util.Locale;
 import java.util.Objects;
 import org.openbot.OpenBotApplication;
 import org.openbot.R;
@@ -32,9 +33,6 @@ import org.openbot.utils.Constants;
 import org.openbot.vehicle.UsbConnection;
 import org.openbot.vehicle.Vehicle;
 import timber.log.Timber;
-
-// For a library module, uncomment the following line
-// import org.openbot.controller.ControllerActivity;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -45,6 +43,9 @@ public class MainActivity extends AppCompatActivity {
   private BottomNavigationView bottomNavigationView;
   private NavController navController;
 
+  // TextToSpeech field
+  private TextToSpeech tts;
+
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -53,14 +54,7 @@ public class MainActivity extends AppCompatActivity {
     vehicle = OpenBotApplication.vehicle;
     bottomNavigationView = findViewById(R.id.bottomNavigationView);
     bottomNavigationView.setSelectedItemId(R.id.home);
-    //    if (vehicle == null) {
-    //      SharedPreferences sharedPreferences =
-    // PreferenceManager.getDefaultSharedPreferences(this);
-    //      int baudRate = Integer.parseInt(sharedPreferences.getString("baud_rate", "115200"));
-    //      vehicle = new Vehicle(this, baudRate);
-    //      vehicle.connectUsb();
     viewModel.setVehicle(vehicle);
-    //    }
 
     localBroadcastReceiver =
         new BroadcastReceiver() {
@@ -78,13 +72,11 @@ public class MainActivity extends AppCompatActivity {
                   Timber.i("USB device attached");
                   break;
 
-                  // Case activated when app is not set to open default when usb is connected
                 case UsbConnection.ACTION_USB_PERMISSION:
                   synchronized (this) {
                     UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                     if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                       if (usbDevice != null) {
-                        // call method to set up device communication
                         if (!vehicle.isUsbConnected()) {
                           vehicle.connectUsb();
                         }
@@ -93,13 +85,14 @@ public class MainActivity extends AppCompatActivity {
                       }
                     }
                   }
-
                   break;
+
                 case UsbManager.ACTION_USB_DEVICE_DETACHED:
                   vehicle.disconnectUsb();
                   viewModel.setUsbStatus(vehicle.isUsbConnected());
                   Timber.i("USB device detached");
                   break;
+
                 case DEVICE_ACTION_DATA_RECEIVED:
                   viewModel.setDeviceData(intent.getStringExtra("data"));
                   break;
@@ -107,6 +100,7 @@ public class MainActivity extends AppCompatActivity {
             }
           }
         };
+
     IntentFilter localIntentFilter = new IntentFilter();
     localIntentFilter.addAction(DEVICE_ACTION_DATA_RECEIVED);
     localIntentFilter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
@@ -126,10 +120,7 @@ public class MainActivity extends AppCompatActivity {
     Toolbar toolbar = findViewById(R.id.toolbar);
     setSupportActionBar(toolbar);
 
-    bottomNavigationView.setOnItemReselectedListener(
-        item -> {
-          // Do nothing when the selected item is already selected
-        });
+    bottomNavigationView.setOnItemReselectedListener(item -> {});
 
     NavigationUI.setupWithNavController(toolbar, navController, appBarConfiguration);
     NavigationUI.setupWithNavController(bottomNavigationView, navController);
@@ -148,7 +139,6 @@ public class MainActivity extends AppCompatActivity {
             bottomNavigationView.setVisibility(View.GONE);
           }
 
-          // To update the toolbar icon according to the Fragment.
           Menu menu = toolbar.getMenu();
           if (destination.getId() == R.id.projectsFragment) {
             menu.findItem(R.id.settingsFragment).setVisible(false);
@@ -162,18 +152,30 @@ public class MainActivity extends AppCompatActivity {
           }
         });
 
-    //    if (savedInstanceState == null) {
-    //      // Default to open this when app opens
-    //      Intent intent = new Intent(this, DefaultActivity.class);
-    //      startActivity(intent);
-    //    }
+    // Initialize TTS
+    tts = new TextToSpeech(this, status -> {
+      if (status == TextToSpeech.SUCCESS) {
+        int result = tts.setLanguage(Locale.US);
+        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+          Timber.e("TTS: Language not supported.");
+        } else {
+          speak("Hello, I am OpenBot and I am ready.");
+        }
+      } else {
+        Timber.e("TTS: Initialization failed.");
+      }
+    });
+  }
+
+  private void speak(String text) {
+    if (tts != null) {
+      tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
+    }
   }
 
   @Override
   public boolean onCreateOptionsMenu(Menu menu) {
-    // Inflate the menu; this adds items to the action bar if it is present.
     getMenuInflater().inflate(R.menu.menu_items, menu);
-    // Get the current destination id.
     int currentDestinationId =
         Objects.requireNonNull(navController.getCurrentDestination()).getId();
     if (currentDestinationId == R.id.projectsFragment) {
@@ -199,7 +201,6 @@ public class MainActivity extends AppCompatActivity {
       navController.navigate(R.id.barCodeScannerFragment);
       return true;
     }
-
     return NavigationUI.onNavDestinationSelected(item, navController)
         || super.onOptionsItemSelected(item);
   }
@@ -221,8 +222,6 @@ public class MainActivity extends AppCompatActivity {
     Bundle bundle = new Bundle();
     bundle.putParcelable(Constants.DATA_CONTINUOUS, event);
     getSupportFragmentManager().setFragmentResult(Constants.KEY_EVENT_CONTINUOUS, bundle);
-
-    // Check that the event came from a game controller
     if ((event.getSource() & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD) {
       bundle.putParcelable(Constants.DATA, event);
       getSupportFragmentManager().setFragmentResult(Constants.KEY_EVENT, bundle);
@@ -237,10 +236,15 @@ public class MainActivity extends AppCompatActivity {
       localBroadcastManager.unregisterReceiver(localBroadcastReceiver);
       localBroadcastManager = null;
     }
-
     unregisterReceiver(localBroadcastReceiver);
     if (localBroadcastReceiver != null) localBroadcastReceiver = null;
     if (!isChangingConfigurations()) vehicle.disconnectUsb();
+
+    if (tts != null) {
+      tts.stop();
+      tts.shutdown();
+    }
+
     super.onDestroy();
   }
 
