@@ -21,6 +21,7 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.navigation.NavController;
+import androidx.navigation.Navigation;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
@@ -34,7 +35,7 @@ import org.openbot.vehicle.UsbConnection;
 import org.openbot.vehicle.Vehicle;
 import timber.log.Timber;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
   private MainViewModel viewModel;
   private BroadcastReceiver localBroadcastReceiver;
@@ -42,14 +43,16 @@ public class MainActivity extends AppCompatActivity {
   private LocalBroadcastManager localBroadcastManager;
   private BottomNavigationView bottomNavigationView;
   private NavController navController;
-
-  // TextToSpeech field
   private TextToSpeech tts;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_main);
+
+    // Initialize TTS
+    tts = new TextToSpeech(this, this);
+
     viewModel = new ViewModelProvider(this).get(MainViewModel.class);
     vehicle = OpenBotApplication.vehicle;
     bottomNavigationView = findViewById(R.id.bottomNavigationView);
@@ -120,7 +123,10 @@ public class MainActivity extends AppCompatActivity {
     Toolbar toolbar = findViewById(R.id.toolbar);
     setSupportActionBar(toolbar);
 
-    bottomNavigationView.setOnItemReselectedListener(item -> {});
+    bottomNavigationView.setOnItemReselectedListener(
+        item -> {
+          // Do nothing when the selected item is already selected
+        });
 
     NavigationUI.setupWithNavController(toolbar, navController, appBarConfiguration);
     NavigationUI.setupWithNavController(bottomNavigationView, navController);
@@ -151,26 +157,6 @@ public class MainActivity extends AppCompatActivity {
             menu.findItem(R.id.settingsFragment).setVisible(true);
           }
         });
-
-    // Initialize TTS
-    tts = new TextToSpeech(this, status -> {
-      if (status == TextToSpeech.SUCCESS) {
-        int result = tts.setLanguage(Locale.US);
-        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-          Timber.e("TTS: Language not supported.");
-        } else {
-          speak("Hello, I am OpenBot and I am ready.");
-        }
-      } else {
-        Timber.e("TTS: Initialization failed.");
-      }
-    });
-  }
-
-  private void speak(String text) {
-    if (tts != null) {
-      tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
-    }
   }
 
   @Override
@@ -201,6 +187,7 @@ public class MainActivity extends AppCompatActivity {
       navController.navigate(R.id.barCodeScannerFragment);
       return true;
     }
+
     return NavigationUI.onNavDestinationSelected(item, navController)
         || super.onOptionsItemSelected(item);
   }
@@ -222,6 +209,7 @@ public class MainActivity extends AppCompatActivity {
     Bundle bundle = new Bundle();
     bundle.putParcelable(Constants.DATA_CONTINUOUS, event);
     getSupportFragmentManager().setFragmentResult(Constants.KEY_EVENT_CONTINUOUS, bundle);
+
     if ((event.getSource() & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD) {
       bundle.putParcelable(Constants.DATA, event);
       getSupportFragmentManager().setFragmentResult(Constants.KEY_EVENT, bundle);
@@ -236,15 +224,18 @@ public class MainActivity extends AppCompatActivity {
       localBroadcastManager.unregisterReceiver(localBroadcastReceiver);
       localBroadcastManager = null;
     }
+
     unregisterReceiver(localBroadcastReceiver);
     if (localBroadcastReceiver != null) localBroadcastReceiver = null;
-    if (!isChangingConfigurations()) vehicle.disconnectUsb();
 
+    // SHUTDOWN TTS
     if (tts != null) {
       tts.stop();
       tts.shutdown();
+      tts = null;
     }
 
+    if (!isChangingConfigurations()) vehicle.disconnectUsb();
     super.onDestroy();
   }
 
@@ -256,5 +247,21 @@ public class MainActivity extends AppCompatActivity {
   @Override
   protected void onPause() {
     super.onPause();
+  }
+
+  // TTS INIT
+  @Override
+  public void onInit(int status) {
+    if (status == TextToSpeech.SUCCESS) {
+      tts.setLanguage(Locale.US);
+      speak("Welcome to OpenBot.");
+    }
+  }
+
+  // TTS SPEAK METHOD
+  public void speak(String text) {
+    if (tts != null) {
+      tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tts1");
+    }
   }
 }
