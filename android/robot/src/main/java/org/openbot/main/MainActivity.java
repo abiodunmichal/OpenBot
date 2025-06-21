@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Bundle;
+import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -26,6 +27,7 @@ import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Objects;
 import org.openbot.OpenBotApplication;
@@ -34,6 +36,19 @@ import org.openbot.utils.Constants;
 import org.openbot.vehicle.UsbConnection;
 import org.openbot.vehicle.Vehicle;
 import timber.log.Timber;
+
+// Voice assistant network dependencies
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
@@ -45,24 +60,15 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
   private NavController navController;
   private TextToSpeech tts;
 
+  private static final int STT_REQUEST_CODE = 1000; // ✅ Required for STT
+
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_main);
 
-    // Initialize TTS
     tts = new TextToSpeech(this, this);
-    // ✅ Automatically start listening on launch
-    startVoiceRecognition();
-    @Override
-protected void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-    setContentView(R.layout.activity_main);
-
-    tts = new TextToSpeech(this, this);
-
-    // ✅ Automatically start STT as soon as app launches
-    startVoiceRecognition();
+    startVoiceRecognition(); // ✅ Auto start voice input
 
     viewModel = new ViewModelProvider(this).get(MainViewModel.class);
     vehicle = OpenBotApplication.vehicle;
@@ -75,72 +81,6 @@ protected void onCreate(Bundle savedInstanceState) {
           @Override
           public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            private void startVoiceRecognition() {
-    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-    startActivityForResult(intent, 1000);
-            }
-            @Override
-protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-    super.onActivityResult(requestCode, resultCode, data);
-    if (requestCode == 1000 && resultCode == RESULT_OK && data != null) {
-        ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-        if (results != null && !results.isEmpty()) {
-            String spokenText = results.get(0);
-            sendToChatGPT(spokenText);
-        }
-    }
-            }
-            private void sendToChatGPT(String userText) {
-    OkHttpClient client = new OkHttpClient();
-
-    JSONObject jsonBody = new JSONObject();
-    try {
-        jsonBody.put("model", "gpt-3.5-turbo");
-        JSONArray messages = new JSONArray();
-        messages.put(new JSONObject().put("role", "user").put("content", userText));
-        jsonBody.put("messages", messages);
-    } catch (JSONException e) {
-        e.printStackTrace();
-    }
-
-    RequestBody body = RequestBody.create(
-        jsonBody.toString(), MediaType.get("application/json"));
-
-    Request request = new Request.Builder()
-        .url("https://api.openai.com/v1/chat/completions")
-        .addHeader("Authorization", "Bearer YOUR_OPENAI_API_KEY")
-        .post(body)
-        .build();
-
-    client.newCall(request).enqueue(new Callback() {
-        @Override
-        public void onResponse(Call call, Response response) throws IOException {
-            String responseBody = response.body().string();
-            try {
-                JSONObject json = new JSONObject(responseBody);
-                String reply = json.getJSONArray("choices")
-                    .getJSONObject(0)
-                    .getJSONObject("message")
-                    .getString("content");
-
-                runOnUiThread(() -> speakReply(reply));
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-        }
-
-        @Override
-        public void onFailure(Call call, IOException e) {
-            e.printStackTrace();
-        }
-    });
-              }
-          private void speakReply(String reply) {
-    tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, null);
-          }
 
             if (action != null) {
               switch (action) {
@@ -305,7 +245,6 @@ protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     unregisterReceiver(localBroadcastReceiver);
     if (localBroadcastReceiver != null) localBroadcastReceiver = null;
 
-    // SHUTDOWN TTS
     if (tts != null) {
       tts.stop();
       tts.shutdown();
@@ -326,7 +265,6 @@ protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onPause();
   }
 
-  // TTS INIT
   @Override
   public void onInit(int status) {
     if (status == TextToSpeech.SUCCESS) {
@@ -335,10 +273,77 @@ protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     }
   }
 
-  // TTS SPEAK METHOD
   public void speak(String text) {
     if (tts != null) {
       tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tts1");
     }
+  }
+
+  // ✅ STT
+  private void startVoiceRecognition() {
+    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+    startActivityForResult(intent, STT_REQUEST_CODE);
+  }
+
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == STT_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
+      ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+      if (results != null && !results.isEmpty()) {
+        String spokenText = results.get(0);
+        sendToChatGPT(spokenText);
+      }
+    }
+  }
+
+  // ✅ ChatGPT Integration
+  private void sendToChatGPT(String userText) {
+    OkHttpClient client = new OkHttpClient();
+
+    JSONObject jsonBody = new JSONObject();
+    try {
+      jsonBody.put("model", "gpt-3.5-turbo");
+      JSONArray messages = new JSONArray();
+      messages.put(new JSONObject().put("role", "user").put("content", userText));
+      jsonBody.put("messages", messages);
+    } catch (JSONException e) {
+      e.printStackTrace();
+    }
+
+    RequestBody body = RequestBody.create(
+        jsonBody.toString(), MediaType.get("application/json"));
+
+    Request request = new Request.Builder()
+        .url("https://api.openai.com/v1/chat/completions")
+        .addHeader("Authorization", "Bearer YOUR_OPENAI_API_KEY")
+        .post(body)
+        .build();
+
+    client.newCall(request).enqueue(new Callback() {
+      @Override
+      public void onResponse(Call call, Response response) throws IOException {
+        String responseBody = response.body().string();
+        try {
+          JSONObject json = new JSONObject(responseBody);
+          String reply = json.getJSONArray("choices")
+              .getJSONObject(0)
+              .getJSONObject("message")
+              .getString("content");
+
+          runOnUiThread(() -> speak(reply));
+        } catch (JSONException e) {
+          e.printStackTrace();
+        }
+      }
+
+      @Override
+      public void onFailure(Call call, IOException e) {
+        e.printStackTrace();
+      }
+    });
   }
 }
