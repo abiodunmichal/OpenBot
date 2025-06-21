@@ -9,7 +9,9 @@ import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Bundle;
+import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -60,7 +62,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
   private NavController navController;
   private TextToSpeech tts;
 
-  private static final int STT_REQUEST_CODE = 1000; // ✅ Required for STT
+  private SpeechRecognizer speechRecognizer;
+  private Intent recognizerIntent;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -68,7 +71,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     setContentView(R.layout.activity_main);
 
     tts = new TextToSpeech(this, this);
-    startVoiceRecognition(); // ✅ Auto start voice input
+    initVoiceRecognizer(); // ✅ continuous listening
 
     viewModel = new ViewModelProvider(this).get(MainViewModel.class);
     vehicle = OpenBotApplication.vehicle;
@@ -176,6 +179,48 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         });
   }
 
+  private void initVoiceRecognizer() {
+    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+    recognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+    recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+    recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+
+    speechRecognizer.setRecognitionListener(new RecognitionListener() {
+      @Override public void onReadyForSpeech(Bundle params) {}
+      @Override public void onBeginningOfSpeech() {}
+      @Override public void onRmsChanged(float rmsdB) {}
+      @Override public void onBufferReceived(byte[] buffer) {}
+      @Override public void onEndOfSpeech() {}
+      @Override public void onPartialResults(Bundle partialResults) {}
+      @Override public void onEvent(int eventType, Bundle params) {}
+
+      @Override
+      public void onResults(Bundle results) {
+        ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        if (matches != null && !matches.isEmpty()) {
+          String spokenText = matches.get(0);
+          sendToChatGPT(spokenText);
+        }
+        restartVoiceRecognition(); // restart
+      }
+
+      @Override
+      public void onError(int error) {
+        restartVoiceRecognition(); // restart on error
+      }
+    });
+
+    speechRecognizer.startListening(recognizerIntent);
+  }
+
+  private void restartVoiceRecognition() {
+    if (speechRecognizer != null) {
+      speechRecognizer.stopListening();
+      speechRecognizer.cancel();
+      speechRecognizer.startListening(recognizerIntent);
+    }
+  }
+
   @Override
   public boolean onCreateOptionsMenu(Menu menu) {
     getMenuInflater().inflate(R.menu.menu_items, menu);
@@ -251,6 +296,11 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
       tts = null;
     }
 
+    if (speechRecognizer != null) {
+      speechRecognizer.destroy();
+      speechRecognizer = null;
+    }
+
     if (!isChangingConfigurations()) vehicle.disconnectUsb();
     super.onDestroy();
   }
@@ -279,28 +329,6 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     }
   }
 
-  // ✅ STT
-  private void startVoiceRecognition() {
-    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-    startActivityForResult(intent, STT_REQUEST_CODE);
-  }
-
-  @Override
-  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-    super.onActivityResult(requestCode, resultCode, data);
-    if (requestCode == STT_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
-      ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-      if (results != null && !results.isEmpty()) {
-        String spokenText = results.get(0);
-        sendToChatGPT(spokenText);
-      }
-    }
-  }
-
-  // ✅ ChatGPT Integration
   private void sendToChatGPT(String userText) {
     OkHttpClient client = new OkHttpClient();
 
@@ -319,7 +347,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
 
     Request request = new Request.Builder()
         .url("https://api.openai.com/v1/chat/completions")
-        .addHeader("Authorization", "Bearer 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  ")
+        .addHeader("Authorization", "Bearer sk-your-key-here")
         .post(body)
         .build();
 
