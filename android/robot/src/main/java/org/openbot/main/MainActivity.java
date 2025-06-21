@@ -52,6 +52,17 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
 
     // Initialize TTS
     tts = new TextToSpeech(this, this);
+    // ✅ Automatically start listening on launch
+    startVoiceRecognition();
+    @Override
+protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    setContentView(R.layout.activity_main);
+
+    tts = new TextToSpeech(this, this);
+
+    // ✅ Automatically start STT as soon as app launches
+    startVoiceRecognition();
 
     viewModel = new ViewModelProvider(this).get(MainViewModel.class);
     vehicle = OpenBotApplication.vehicle;
@@ -64,6 +75,72 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
           @Override
           public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
+            private void startVoiceRecognition() {
+    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+    startActivityForResult(intent, 1000);
+            }
+            @Override
+protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == 1000 && resultCode == RESULT_OK && data != null) {
+        ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+        if (results != null && !results.isEmpty()) {
+            String spokenText = results.get(0);
+            sendToChatGPT(spokenText);
+        }
+    }
+            }
+            private void sendToChatGPT(String userText) {
+    OkHttpClient client = new OkHttpClient();
+
+    JSONObject jsonBody = new JSONObject();
+    try {
+        jsonBody.put("model", "gpt-3.5-turbo");
+        JSONArray messages = new JSONArray();
+        messages.put(new JSONObject().put("role", "user").put("content", userText));
+        jsonBody.put("messages", messages);
+    } catch (JSONException e) {
+        e.printStackTrace();
+    }
+
+    RequestBody body = RequestBody.create(
+        jsonBody.toString(), MediaType.get("application/json"));
+
+    Request request = new Request.Builder()
+        .url("https://api.openai.com/v1/chat/completions")
+        .addHeader("Authorization", "Bearer YOUR_OPENAI_API_KEY")
+        .post(body)
+        .build();
+
+    client.newCall(request).enqueue(new Callback() {
+        @Override
+        public void onResponse(Call call, Response response) throws IOException {
+            String responseBody = response.body().string();
+            try {
+                JSONObject json = new JSONObject(responseBody);
+                String reply = json.getJSONArray("choices")
+                    .getJSONObject(0)
+                    .getJSONObject("message")
+                    .getString("content");
+
+                runOnUiThread(() -> speakReply(reply));
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void onFailure(Call call, IOException e) {
+            e.printStackTrace();
+        }
+    });
+              }
+          private void speakReply(String reply) {
+    tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, null);
+          }
 
             if (action != null) {
               switch (action) {
