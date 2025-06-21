@@ -319,7 +319,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
 
     Request request = new Request.Builder()
         .url("https://api.openai.com/v1/chat/completions")
-        .addHeader("Authorization", "Bearer YOUR_OPENAI_API_KEY")
+        .addHeader("Authorization", "Bearer 
+                 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  ")
         .post(body)
         .build();
 
