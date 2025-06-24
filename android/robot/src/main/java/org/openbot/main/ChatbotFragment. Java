@@ -1,0 +1,62 @@
+package org.openbot.main;
+
+import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.*;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import org.openbot.R;
+import java.io.*;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+
+public class ChatbotFragment extends Fragment {
+
+  private EditText inputText, responseText;
+  private Button addRuleButton;
+  private ListView rulesList;
+  private ArrayList<ChatbotRule> ruleList;
+  private ArrayAdapter<String> adapter;
+  private File jsonFile;
+
+  public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    return inflater.inflate(R.layout.fragment_chatbot, container, false);
+  }
+
+  public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+    super.onViewCreated(view, savedInstanceState);
+
+    inputText = view.findViewById(R.id.inputText);
+    responseText = view.findViewById(R.id.responseText);
+    addRuleButton = view.findViewById(R.id.addRuleButton);
+    rulesList = view.findViewById(R.id.rulesList);
+
+    jsonFile = new File(requireContext().getFilesDir(), "chatbot_rules.json");
+    ruleList = loadRules();
+
+    adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, getRuleDisplayList());
+    rulesList.setAdapter(adapter);
+
+    addRuleButton.setOnClickListener(v -> {
+      String input = inputText.getText().toString().trim();
+      String response = responseText.getText().toString().trim();
+      if (!input.isEmpty() && !response.isEmpty()) {
+        ruleList.add(new ChatbotRule(input, response));
+        saveRules();
+        adapter.clear();
+        adapter.addAll(getRuleDisplayList());
+        adapter.notifyDataSetChanged();
+        inputText.setText("");
+        responseText.setText("");
+      }
+    });
+
+    rulesList.setOnItemLongClickListener((parent, view1, position, id) -> {
+      ruleList.remove(position);
+      saveRules();
+      adapter.clear();
