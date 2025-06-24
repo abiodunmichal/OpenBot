@@ -30,7 +30,9 @@ import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import org.openbot.OpenBotApplication;
 import org.openbot.R;
@@ -38,19 +40,6 @@ import org.openbot.utils.Constants;
 import org.openbot.vehicle.UsbConnection;
 import org.openbot.vehicle.Vehicle;
 import timber.log.Timber;
-
-// Voice assistant network dependencies
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
@@ -64,6 +53,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
 
   private SpeechRecognizer speechRecognizer;
   private Intent recognizerIntent;
+  private final Map<String, String> chatRules = new HashMap<>();
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -71,7 +61,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     setContentView(R.layout.activity_main);
 
     tts = new TextToSpeech(this, this);
-    initVoiceRecognizer(); // ✅ continuous listening
+    loadChatRules();
+    initVoiceRecognizer();
 
     viewModel = new ViewModelProvider(this).get(MainViewModel.class);
     vehicle = OpenBotApplication.vehicle;
@@ -79,50 +70,43 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     bottomNavigationView.setSelectedItemId(R.id.home);
     viewModel.setVehicle(vehicle);
 
-    localBroadcastReceiver =
-        new BroadcastReceiver() {
-          @Override
-          public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-
-            if (action != null) {
-              switch (action) {
-                case UsbManager.ACTION_USB_DEVICE_ATTACHED:
-                  if (!vehicle.isUsbConnected()) {
+    localBroadcastReceiver = new BroadcastReceiver() {
+      @Override
+      public void onReceive(Context context, Intent intent) {
+        String action = intent.getAction();
+        if (action != null) {
+          switch (action) {
+            case UsbManager.ACTION_USB_DEVICE_ATTACHED:
+              if (!vehicle.isUsbConnected()) {
+                vehicle.connectUsb();
+                viewModel.setUsbStatus(vehicle.isUsbConnected());
+              }
+              Timber.i("USB device attached");
+              break;
+            case UsbConnection.ACTION_USB_PERMISSION:
+              synchronized (this) {
+                UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                  if (usbDevice != null && !vehicle.isUsbConnected()) {
                     vehicle.connectUsb();
                     viewModel.setUsbStatus(vehicle.isUsbConnected());
+                    Timber.i("USB permission granted");
                   }
-                  Timber.i("USB device attached");
-                  break;
-
-                case UsbConnection.ACTION_USB_PERMISSION:
-                  synchronized (this) {
-                    UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                      if (usbDevice != null) {
-                        if (!vehicle.isUsbConnected()) {
-                          vehicle.connectUsb();
-                        }
-                        viewModel.setUsbStatus(vehicle.isUsbConnected());
-                        Timber.i("USB device attached");
-                      }
-                    }
-                  }
-                  break;
-
-                case UsbManager.ACTION_USB_DEVICE_DETACHED:
-                  vehicle.disconnectUsb();
-                  viewModel.setUsbStatus(vehicle.isUsbConnected());
-                  Timber.i("USB device detached");
-                  break;
-
-                case DEVICE_ACTION_DATA_RECEIVED:
-                  viewModel.setDeviceData(intent.getStringExtra("data"));
-                  break;
+                }
               }
-            }
+              break;
+            case UsbManager.ACTION_USB_DEVICE_DETACHED:
+              vehicle.disconnectUsb();
+              viewModel.setUsbStatus(vehicle.isUsbConnected());
+              Timber.i("USB device detached");
+              break;
+            case DEVICE_ACTION_DATA_RECEIVED:
+              viewModel.setDeviceData(intent.getStringExtra("data"));
+              break;
           }
-        };
+        }
+      }
+    };
 
     IntentFilter localIntentFilter = new IntentFilter();
     localIntentFilter.addAction(DEVICE_ACTION_DATA_RECEIVED);
@@ -132,7 +116,6 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
 
     localBroadcastManager = LocalBroadcastManager.getInstance(this);
     localBroadcastManager.registerReceiver(localBroadcastReceiver, localIntentFilter);
-
     registerReceiver(localBroadcastReceiver, localIntentFilter);
 
     NavHostFragment navHostFragment =
@@ -143,46 +126,54 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     Toolbar toolbar = findViewById(R.id.toolbar);
     setSupportActionBar(toolbar);
 
-    bottomNavigationView.setOnItemReselectedListener(
-        item -> {
-          // Do nothing when the selected item is already selected
-        });
+    bottomNavigationView.setOnItemReselectedListener(item -> {});
 
     NavigationUI.setupWithNavController(toolbar, navController, appBarConfiguration);
     NavigationUI.setupWithNavController(bottomNavigationView, navController);
 
-    navController.addOnDestinationChangedListener(
-        (controller, destination, arguments) -> {
-          if (destination.getId() == R.id.mainFragment
-              || destination.getId() == R.id.settingsFragment
-              || destination.getId() == R.id.usbFragment
-              || destination.getId() == R.id.projectsFragment
-              || destination.getId() == R.id.profileFragment) {
-            toolbar.setVisibility(View.VISIBLE);
-            bottomNavigationView.setVisibility(View.VISIBLE);
-          } else {
-            toolbar.setVisibility(View.GONE);
-            bottomNavigationView.setVisibility(View.GONE);
-          }
+    navController.addOnDestinationChangedListener((controller, destination, arguments) -> {
+      if (destination.getId() == R.id.mainFragment
+          || destination.getId() == R.id.settingsFragment
+          || destination.getId() == R.id.usbFragment
+          || destination.getId() == R.id.projectsFragment
+          || destination.getId() == R.id.profileFragment) {
+        toolbar.setVisibility(View.VISIBLE);
+        bottomNavigationView.setVisibility(View.VISIBLE);
+      } else {
+        toolbar.setVisibility(View.GONE);
+        bottomNavigationView.setVisibility(View.GONE);
+      }
 
-          Menu menu = toolbar.getMenu();
-          if (destination.getId() == R.id.projectsFragment) {
-            menu.findItem(R.id.settingsFragment).setVisible(false);
-            menu.findItem(R.id.barCodeScannerFragment).setVisible(true);
-          } else {
-            menu.findItem(R.id.barCodeScannerFragment).setVisible(false);
-            if (vehicle.getConnectionType().equals("Bluetooth")) {
-              menu.findItem(R.id.bluetoothFragment).setVisible(true);
-            }
-            menu.findItem(R.id.settingsFragment).setVisible(true);
-          }
-        });
+      Menu menu = toolbar.getMenu();
+      if (destination.getId() == R.id.projectsFragment) {
+        menu.findItem(R.id.settingsFragment).setVisible(false);
+        menu.findItem(R.id.barCodeScannerFragment).setVisible(true);
+      } else {
+        menu.findItem(R.id.barCodeScannerFragment).setVisible(false);
+        if (vehicle.getConnectionType().equals("Bluetooth")) {
+          menu.findItem(R.id.bluetoothFragment).setVisible(true);
+        }
+        menu.findItem(R.id.settingsFragment).setVisible(true);
+      }
+    });
+  }
+
+  private void loadChatRules() {
+    chatRules.put("hello", "Hi there!");
+    chatRules.put("how are you", "I'm just a robot, but I'm doing fine.");
+    chatRules.put("what is your name", "My name is Neo, your assistant.");
+    chatRules.put("move forward", "Moving forward now.");
+    chatRules.put("move back", "Reversing now.");
+    chatRules.put("turn left", "Turning left.");
+    chatRules.put("turn right", "Turning right.");
+    chatRules.put("stop", "Stopping now.");
   }
 
   private void initVoiceRecognizer() {
     speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
     recognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-    recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+    recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
     recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
 
     speechRecognizer.setRecognitionListener(new RecognitionListener() {
@@ -198,15 +189,16 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
       public void onResults(Bundle results) {
         ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         if (matches != null && !matches.isEmpty()) {
-          String spokenText = matches.get(0);
-          sendToChatGPT(spokenText);
+          String spokenText = matches.get(0).toLowerCase();
+          String reply = chatRules.getOrDefault(spokenText, "Sorry, I didn't understand that.");
+          speak(reply);
         }
-        restartVoiceRecognition(); // restart
+        restartVoiceRecognition();
       }
 
       @Override
       public void onError(int error) {
-        restartVoiceRecognition(); // restart on error
+        restartVoiceRecognition();
       }
     });
 
@@ -221,11 +213,24 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     }
   }
 
+  public void speak(String text) {
+    if (tts != null) {
+      tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tts1");
+    }
+  }
+
+  @Override
+  public void onInit(int status) {
+    if (status == TextToSpeech.SUCCESS) {
+      tts.setLanguage(Locale.US);
+      speak("Welcome to OpenBot.");
+    }
+  }
+
   @Override
   public boolean onCreateOptionsMenu(Menu menu) {
     getMenuInflater().inflate(R.menu.menu_items, menu);
-    int currentDestinationId =
-        Objects.requireNonNull(navController.getCurrentDestination()).getId();
+    int currentDestinationId = Objects.requireNonNull(navController.getCurrentDestination()).getId();
     if (currentDestinationId == R.id.projectsFragment) {
       menu.findItem(R.id.barCodeScannerFragment).setVisible(true);
       menu.findItem(R.id.settingsFragment).setVisible(false);
@@ -286,9 +291,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
       localBroadcastManager.unregisterReceiver(localBroadcastReceiver);
       localBroadcastManager = null;
     }
-
     unregisterReceiver(localBroadcastReceiver);
-    if (localBroadcastReceiver != null) localBroadcastReceiver = null;
+    localBroadcastReceiver = null;
 
     if (tts != null) {
       tts.stop();
@@ -303,75 +307,5 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
 
     if (!isChangingConfigurations()) vehicle.disconnectUsb();
     super.onDestroy();
-  }
-
-  @Override
-  protected void onResume() {
-    super.onResume();
-  }
-
-  @Override
-  protected void onPause() {
-    super.onPause();
-  }
-
-  @Override
-  public void onInit(int status) {
-    if (status == TextToSpeech.SUCCESS) {
-      tts.setLanguage(Locale.US);
-      speak("Welcome to OpenBot.");
-    }
-  }
-
-  public void speak(String text) {
-    if (tts != null) {
-      tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tts1");
-    }
-  }
-
-  private void sendToChatGPT(String userText) {
-    OkHttpClient client = new OkHttpClient();
-
-    JSONObject jsonBody = new JSONObject();
-    try {
-      jsonBody.put("model", "gpt-3.5-turbo");
-      JSONArray messages = new JSONArray();
-      messages.put(new JSONObject().put("role", "user").put("content", userText));
-      jsonBody.put("messages", messages);
-    } catch (JSONException e) {
-      e.printStackTrace();
-    }
-
-    RequestBody body = RequestBody.create(
-        jsonBody.toString(), MediaType.get("application/json"));
-
-    Request request = new Request.Builder()
-        .url("https://api.openai.com/v1/chat/completions")
-        .addHeader("Authorization", "Bearer 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")
-        .post(body)
-        .build();
-
-    client.newCall(request).enqueue(new Callback() {
-      @Override
-      public void onResponse(Call call, Response response) throws IOException {
-        String responseBody = response.body().string();
-        try {
-          JSONObject json = new JSONObject(responseBody);
-          String reply = json.getJSONArray("choices")
-              .getJSONObject(0)
-              .getJSONObject("message")
-              .getString("content");
-
-          runOnUiThread(() -> speak(reply));
-        } catch (JSONException e) {
-          e.printStackTrace();
-        }
-      }
-
-      @Override
-      public void onFailure(Call call, IOException e) {
-        e.printStackTrace();
-      }
-    });
   }
 }
