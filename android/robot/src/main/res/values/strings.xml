@@ -133,7 +133,6 @@
     <string-array name="control_modes">
         <item>Gamepad</item>
         <item>Phone</item>
-        <!--        <item>WebRTC</item>-->
     </string-array>
     <string-array name="drive_modes">
         <item>Dual</item>
@@ -153,7 +152,6 @@
         <item>Local Server</item>
     </string-array>
 
-    <!-- TODO: Remove or change this placeholder text -->
     <string-array name="stream_server">
         <item>WebRTC</item>
         <item>RTSP</item>
@@ -162,16 +160,20 @@
         <item>Bluetooth</item>
         <item>USB</item>
     </string-array>
-    <!-- TODO: Remove or change this placeholder text -->
     <string-array name="speed_modes">
         <item>Slow</item>
         <item>Normal</item>
         <item>Fast</item>
     </string-array>
+
+    <!-- Bottom navigation titles -->
     <string name="profile">Profile</string>
     <string name="projects">Projects</string>
+    <string name="chatbot">Chatbot</string>
     <string name="scanner">Scanner</string>
     <string name="home">Home</string>
+
+    <!-- Other UI strings -->
     <string name="scan_qr_code">Scan QR Code</string>
     <string name="playground">Playground</string>
     <string name="text_on_qr_screen">Place QR code inside the frame to scan. Please avoid shake to get results quickly.</string>
