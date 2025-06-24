@@ -41,6 +41,7 @@
             android:id="@+id/action_mainFragment_to_robotInfoFragment"
             app:destination="@id/robotInfoFragment" />
     </fragment>
+
     <fragment
         android:id="@+id/freeRoamFragment"
         android:name="org.openbot.robot.FreeRoamFragment"
@@ -54,8 +55,7 @@
 
     <action
         android:id="@+id/open_settings_fragment"
-        app:destination="@id/settingsFragment"
-        />
+        app:destination="@id/settingsFragment" />
 
     <fragment
         android:id="@+id/bluetoothFragment"
@@ -73,8 +73,7 @@
 
     <action
         android:id="@+id/open_usb_fragment"
-        app:destination="@id/usbFragment"
-        />
+        app:destination="@id/usbFragment" />
 
     <fragment
         android:id="@+id/loggerFragment"
@@ -94,6 +93,7 @@
     <action
         android:id="@+id/open_profile_fragment"
         app:destination="@id/profileFragment" />
+
     <fragment
         android:id="@+id/AIFragment"
         android:name="org.openbot.autopilot.AutopilotFragment"
@@ -105,6 +105,7 @@
         android:name="org.openbot.controller.ControllerMappingFragment"
         android:label="fragment_controller_mapping"
         tools:layout="@layout/fragment_controller_mapping" />
+
     <fragment
         android:id="@+id/objectNavFragment"
         android:name="org.openbot.objectNav.ObjectNavFragment"
@@ -116,6 +117,7 @@
         android:name="org.openbot.modelManagement.ModelManagementFragment"
         android:label="fragment_model_management"
         tools:layout="@layout/fragment_model_management" />
+
     <fragment
         android:id="@+id/pointGoalNavigationFragment"
         android:name="org.openbot.pointGoalNavigation.PointGoalNavigationFragment"
@@ -136,6 +138,7 @@
             android:id="@+id/action_projectsFragment_to_playGroundFragment"
             app:destination="@id/playGroundFragment" />
     </fragment>
+
     <action
         android:id="@+id/open_projects_fragment"
         app:destination="@id/projectsFragment" />
@@ -167,8 +170,17 @@
         android:name="org.openbot.profile.EditProfileFragment"
         android:label="editProfile"
         tools:layout="@layout/fragment_edit_profile" />
+
     <fragment
         android:id="@+id/robotInfoFragment"
         android:name="org.openbot.robot.RobotInfoFragment"
         android:label="RobotInfoFragment" />
+
+    <!-- ✅ NEW Chatbot Fragment -->
+    <fragment
+        android:id="@+id/chatbotFragment"
+        android:name="org.openbot.main.ChatbotFragment"
+        android:label="Chatbot"
+        tools:layout="@layout/fragment_chatbot" />
+
 </navigation>
