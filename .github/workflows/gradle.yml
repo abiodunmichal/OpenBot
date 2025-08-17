@@ -1,7 +1,7 @@
 name: Build & Upload APK
 
 on:
-  push:            # runs on every commit (edit any file)
+  push:            # runs on every commit
     branches: ["**"]
 
 jobs:
@@ -23,9 +23,9 @@ jobs:
 
       - name: Build Debug APK
         run: cd android && ./gradlew assembleDebug
-        
-- name: Upload APK
-  uses: actions/upload-artifact@v4
-  with:
-    name: robot-debug
-    path: robot/build/outputs/apk/debug/robot-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: robot-debug
+          path: android/robot/build/outputs/apk/debug/robot-debug.apk
