@@ -10,6 +10,8 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.lifecycle.ViewModelProvider;
 
 import org.openbot.R;
@@ -22,6 +24,8 @@ import org.openbot.tflite.Model.PATH_TYPE;
 import org.openbot.tflite.Model.TYPE;
 import org.openbot.tflite.Navigation;
 import org.openbot.tflite.Network.Device;
+import org.openbot.utils.Constants;
+import org.openbot.utils.PermissionUtils;
 import org.openbot.vehicle.Control;
 import org.openbot.vehicle.Vehicle;
 import org.openbot.vision.VisualOdometry;
@@ -36,11 +40,17 @@ public class PointGoalNavigationFragment extends ControlsFragment {
     private Vehicle vehicle;
     private Handler handlerMain;
     private FragmentPointGoalNavigationBinding binding;
-    private boolean isRunning = false;
-    private Navigation navigationPolicy;
 
-    private VisualOdometry vo; // Our custom Visual Odometry
-    private float goalX, goalY; // target coordinates in VO world
+    private boolean isRunning = false;
+    private boolean isPermissionRequested = false;
+
+    private Navigation navigationPolicy;
+    private VisualOdometry vo;
+
+    private float goalX;
+    private float goalZ;
+
+    private Bitmap currentCameraFrame; // Assign this from your camera preview
 
     public PointGoalNavigationFragment() {
         // Required empty public constructor
@@ -48,7 +58,14 @@ public class PointGoalNavigationFragment extends ControlsFragment {
 
     public static PointGoalNavigationFragment newInstance() {
         PointGoalNavigationFragment fragment = new PointGoalNavigationFragment();
+        Bundle args = new Bundle();
+        fragment.setArguments(args);
         return fragment;
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
     }
 
     @Override
@@ -66,37 +83,59 @@ public class PointGoalNavigationFragment extends ControlsFragment {
         vehicle = mainViewModel.getVehicle().getValue();
 
         handlerMain = new Handler(Looper.getMainLooper());
+
         vo = new VisualOdometry();
 
         showStartDialog();
     }
 
-    @Override
-    protected void processControllerKeyData(String command) {}
+    // Call this in your camera frame callback
+    public void processFrame(Bitmap frame) {
+        currentCameraFrame = frame;
+        vo.processFrame(frame);
 
-    @Override
-    protected void processUSBData(String data) {}
+        if (!isRunning) return;
 
-    private void showStartDialog() {
-        // simplified: just set goal directly for demo
-        goalX = 1.0f; // e.g., 1m forward
-        goalY = 0.0f; // e.g., same lateral position
-        startDriving(goalX, goalY);
+        float dx = goalX - (float) vo.getX();
+        float dz = goalZ - (float) vo.getY();
+        float distance = (float) Math.sqrt(dx * dx + dz * dz);
+
+        if (distance < 0.15f) {
+            stop();
+            audioPlayer.playFromStringID(R.string.goal_reached);
+            showInfoDialog(getString(R.string.goal_reached));
+        } else {
+            float deltaYaw = (float) Math.atan2(dz, dx) - (float) vo.getHeading();
+
+            Control control = navigationPolicy.recognizeImage(
+                    currentCameraFrame,
+                    distance,
+                    (float) Math.sin(deltaYaw),
+                    (float) Math.cos(deltaYaw));
+
+            vehicle.setControl(control);
+            Timber.d("control: (" + control.getLeft() + ", " + control.getRight() + ")");
+        }
     }
 
-    private void startDriving(float goalX, float goalY) {
-        this.goalX = goalX;
-        this.goalY = goalY;
+    private void stop() {
+        vehicle.stopBot();
+        isRunning = false;
+    }
 
-        // Load navigation policy
-        Model model = new Model(
-                0,
-                CLASS.NAVIGATION,
-                TYPE.GOALNAV,
-                "navigation.tflite",
-                PATH_TYPE.ASSET,
-                "networks/navigation.tflite",
-                "160x90");
+    private void startDriving(float goalX, float goalZ) {
+        this.goalX = goalX;
+        this.goalZ = goalZ;
+
+        Model model =
+                new Model(
+                        0,
+                        CLASS.NAVIGATION,
+                        TYPE.GOALNAV,
+                        "navigation.tflite",
+                        PATH_TYPE.ASSET,
+                        "networks/navigation.tflite",
+                        "160x90");
 
         try {
             navigationPolicy = new Navigation(requireActivity(), model, Device.CPU, 1);
@@ -107,89 +146,58 @@ public class PointGoalNavigationFragment extends ControlsFragment {
         }
 
         isRunning = true;
-
-        // Start a loop to simulate frame updates
-        handlerMain.post(frameUpdateRunnable);
     }
 
-    private final Runnable frameUpdateRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (!isRunning) return;
-
-            // Capture frame from camera (stub)
-            Bitmap frame = captureCameraFrame(); // implement this with your camera preview
-            if (frame != null) {
-                vo.processFrame(frame);
-
-                float dx = (float) (goalX - vo.getX());
-                float dy = (float) (goalY - vo.getY());
-                float distance = (float) Math.sqrt(dx * dx + dy * dy);
-
-                if (distance < 0.15f) {
-                    stop();
-                    audioPlayer.playFromStringID(R.string.goal_reached);
-                    showInfoDialog(getString(R.string.goal_reached));
-                    return;
-                }
-
-                float deltaYaw = (float) Math.atan2(dy, dx) - (float) vo.getHeading();
-                Control control = navigationPolicy.recognizeImage(
-                        frame,
-                        distance,
-                        (float) Math.sin(deltaYaw),
-                        (float) Math.cos(deltaYaw));
-
-                Timber.d("control: (" + control.getLeft() + ", " + control.getRight() + ")");
-                vehicle.setControl(control);
-            }
-
-            // Repeat loop
-            handlerMain.postDelayed(this, 100); // 10 Hz update
+    private void showStartDialog() {
+        if (getChildFragmentManager().findFragmentByTag(SetGoalDialogFragment.TAG) == null) {
+            SetGoalDialogFragment dialog = SetGoalDialogFragment.newInstance();
+            dialog.setCancelable(false);
+            dialog.show(getChildFragmentManager(), SetGoalDialogFragment.TAG);
         }
-    };
 
-    private void stop() {
-        isRunning = false;
-        vehicle.stopBot();
-    }
+        getChildFragmentManager()
+                .setFragmentResultListener(
+                        SetGoalDialogFragment.TAG,
+                        getViewLifecycleOwner(),
+                        (requestKey, result) -> {
+                            Boolean start = result.getBoolean("start");
 
-    private Bitmap captureCameraFrame() {
-        // TODO: replace with actual camera preview frame
-        return Bitmap.createBitmap(160, 90, Bitmap.Config.ARGB_8888);
+                            if (start) {
+                                Float forward = result.getFloat("forward");
+                                Float left = result.getFloat("left");
+
+                                startDriving(-left, -forward);
+                            } else {
+                                requireActivity().onBackPressed();
+                            }
+                        });
     }
 
     private void showInfoDialog(String message) {
-        // Simplified info dialog
-        Timber.i("INFO: " + message);
+        if (getChildFragmentManager().findFragmentByTag(InfoDialogFragment.TAG) == null) {
+            InfoDialogFragment dialog = InfoDialogFragment.newInstance(message);
+            dialog.setCancelable(false);
+            dialog.show(getChildFragmentManager(), InfoDialogFragment.TAG);
+        }
+
+        getChildFragmentManager()
+                .setFragmentResultListener(
+                        InfoDialogFragment.TAG,
+                        getViewLifecycleOwner(),
+                        (requestKey, result) -> {
+                            Boolean restart = result.getBoolean("restart");
+
+                            if (restart) {
+                                showStartDialog();
+                            } else {
+                                requireActivity().onBackPressed();
+                            }
+                        });
     }
 
     @Override
-    public void onStart() {
-        super.onStart();
-        // no ARCore, so nothing to resume
-    }
+    protected void processControllerKeyData(String command) {}
 
     @Override
-    public void onResume() {
-        super.onResume();
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-        stop();
-    }
-
-    @Override
-    public void onStop() {
-        super.onStop();
-        stop();
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        stop();
-    }
+    protected void processUSBData(String data) {}
 }
