@@ -70,6 +70,16 @@ apply plugin: 'kotlin-android'
 def comlibDir = file("${project.rootDir}/comlib/libs")
 
 dependencies {
+    // Force only protobuf-javalite to avoid duplicate classes
+implementation("com.google.protobuf:protobuf-javalite:3.21.7") {
+    exclude group: "com.google.protobuf", module: "protobuf-java"
+}
+
+configurations {
+    all {
+        exclude group: "com.google.protobuf", module: "protobuf-java"
+    }
+}
     // BoofCV core vision algorithms
 implementation 'org.boofcv:boofcv-core:0.42'
 // Android-specific helpers (camera, bitmap conversion)
