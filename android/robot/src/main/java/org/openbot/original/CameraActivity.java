@@ -225,7 +225,8 @@ public abstract class CameraActivity extends AppCompatActivity
 
     phoneController = PhoneController.getInstance(this);
     preferencesManager = new SharedPreferencesManager(this);
-
+// Initialize Odometry
+odometry = new Odometry(0.001f);
     setContentView(R.layout.activity_camera);
     Toolbar toolbar = findViewById(R.id.toolbar);
     setSupportActionBar(toolbar);
@@ -343,7 +344,16 @@ public abstract class CameraActivity extends AppCompatActivity
           @Override
           public void onSlide(@NonNull View bottomSheet, float slideOffset) {}
         });
+protected void updateOdometryFromFlow(float dx, float dy) {
+    float dTheta = 0f; // no gyro, assume no rotation
+    odometry.update(dx, dy, dTheta);
+    float[] pose = odometry.getPose();
+    Log.d(TAG, String.format("Odometry Pose: x=%.3f y=%.3f θ=%.3f", pose[0], pose[1], pose[2]));
+}
 
+public Odometry getOdometry() {
+    return odometry;
+                    }
     voltageTextView = findViewById(R.id.voltage_info);
     speedTextView = findViewById(R.id.speed_info);
     sonarTextView = findViewById(R.id.sonar_info);
