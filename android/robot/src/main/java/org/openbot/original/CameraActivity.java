@@ -133,41 +133,7 @@ public abstract class CameraActivity extends AppCompatActivity
 
         // ... existing initialization code ...
 
-        // 2️⃣ Initialize Odometry
-        // tune scale (meters per pixel) as needed for your camera
-        odometry = new Odometry(0.001f);
 
-        // ... rest of your onCreate code remains unchanged ...
-    }
-
-    // 3️⃣ Minimal optical flow hook
-    // call this method whenever you have dx, dy from frame tracking
-    protected void updateOdometryFromFlow(float dx, float dy) {
-        float dTheta = 0f; // no gyro, assume no rotation
-        odometry.update(dx, dy, dTheta);
-        float[] pose = odometry.getPose();
-        Log.d(TAG, String.format("Odometry Pose: x=%.3f y=%.3f θ=%.3f", pose[0], pose[1], pose[2]));
-    }
-
-    // Optional: expose Odometry to other classes
-    public Odometry getOdometry() {
-        return odometry;
-    }
-
-    // 4️⃣ Hook into your camera frame processing
-    // Minimal example if you have a Bitmap frame:
-    protected void handleCameraFrame(Bitmap frame) {
-        // TODO: compute optical flow dx, dy between previous frame & this frame
-        float dx = 0f; // replace with actual optical flow X
-        float dy = 0f; // replace with actual optical flow Y
-
-        updateOdometryFromFlow(dx, dy);
-
-        // existing OpenBot frame processing remains
-    }
-
-    // ... rest of your existing CameraActivity.java remains untouched ...
-    }
 
 public abstract class CameraActivity extends AppCompatActivity
     implements OnImageAvailableListener,
