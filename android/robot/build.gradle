@@ -70,6 +70,12 @@ apply plugin: 'kotlin-android'
 def comlibDir = file("${project.rootDir}/comlib/libs")
 
 dependencies {
+    // BoofCV core vision algorithms
+implementation 'org.boofcv:boofcv-core:0.42'
+// Android-specific helpers (camera, bitmap conversion)
+implementation 'org.boofcv:boofcv-android:0.42'
+// Math/optimization library BoofCV uses internally
+implementation 'org.ddogleg:ddogleg:0.22'
 
     // WiFi direct + WebRTC
     implementation project(':comlib')
