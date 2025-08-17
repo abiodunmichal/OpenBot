@@ -20,7 +20,6 @@
 4. Erstellen Sie einen Branch:
 
    `git checkout -b <branch-name>`
-
    wobei `<branch-name>` den Umfang der Arbeit prägnant beschreibt.
 
 5. Erledigen Sie die Arbeit, schreiben Sie gute Commit-Nachrichten und pushen Sie Ihren Branch in das geforkte Repository:
