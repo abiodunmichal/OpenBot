@@ -119,19 +119,19 @@ const float VOLTAGE_LOW = 9.0f;
 const float VOLTAGE_MAX = 12.6f;
 const float ADC_FACTOR = 5.0 / 1023;
 #define HAS_INDICATORS 0
-#define HAS_SONAR 0
+#define HAS_SONAR 1
 #define SONAR_MEDIAN 0
 #define HAS_SPEED_SENSORS_FRONT 0
 #define HAS_OLED 0
-const int PIN_PWM_L1 = 5;
-const int PIN_PWM_L2 = 6;
-const int PIN_PWM_R1 = 9;
-const int PIN_PWM_R2 = 10;
+const int PIN_PWM_L1 = 8;
+const int PIN_PWM_L2 = 9;
+const int PIN_PWM_R1 = 10;
+const int PIN_PWM_R2 = 11;
 const int PIN_SPEED_LF = 2;
 const int PIN_SPEED_RF = 3;
 const int PIN_VIN = A7;
-const int PIN_TRIGGER = 12;
-const int PIN_ECHO = 11;
+const int PIN_TRIGGER = 6;
+const int PIN_ECHO = 7;
 const int PIN_LED_LI = 4;
 const int PIN_LED_RI = 7;
 
