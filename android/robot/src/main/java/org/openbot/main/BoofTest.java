@@ -11,15 +11,18 @@ import boofcv.android.ConvertBitmap;
 public class BoofTest {
 
     public static Bitmap runEdgeDetection(Bitmap input) {
-        // Convert Bitmap to BoofCV image
-        GrayU8 gray = ConvertBitmap.bitmapToBoof(input, (GrayU8) null, null);
+        // Allocate GrayU8 image
+        GrayU8 gray = new GrayU8(input.getWidth(), input.getHeight());
+        ConvertBitmap.bitmapToBoof(input, gray, null);
 
         // Run Canny edge detector
         CannyEdge<GrayU8, GrayU8> canny =
                 FactoryEdgeDetectors.canny(2, true, true, GrayU8.class, GrayU8.class);
 
         canny.process(gray, 0.1f, 0.3f, null);
-        GrayU8 edgeImg = canny.getBinary();  // use getBinary() instead of getEdges()
+
+        // Some builds have getEdges(), some use getContours()
+        GrayU8 edgeImg = canny.getEdges();  // try this first
 
         // Convert back to Bitmap
         Bitmap output = Bitmap.createBitmap(edgeImg.width, edgeImg.height, Bitmap.Config.ARGB_8888);
@@ -28,4 +31,4 @@ public class BoofTest {
         Log.d("BoofTest", "Edge detection done.");
         return output;
     }
-}
+            }
